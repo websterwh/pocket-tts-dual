@@ -126,7 +126,7 @@ For the original built-in English model, clear CONFIG and CHECKPOINT and set LAN
 docker build -t pocket-tts-dual:test .
 docker run --rm --user root --entrypoint sh \
   -v "$PWD/tests:/tests:ro" -v "$PWD/pytest.ini:/app/pytest.ini:ro" \
-  pocket-tts-dual:test -c 'python -m pip install pytest pytest-asyncio httpx && python -m pytest /tests -q'
+  pocket-tts-dual:test -c 'python -m pip install pytest pytest-asyncio httpx && python -m pytest -c /app/pytest.ini /tests -q -p no:cacheprovider'
 ```
 
 Tests cover real TCP discovery/framing, PCM clipping/endianness, voice selection, invalid requests, draining shutdown, startup cleanup, HTTP bearer authentication, inherited HTTP WAV rendering, single-engine loading, and shared scheduling including cancellation. Model inference is stubbed in unit tests. The workflow separately runs `tests/smoke.py` against real default-model inference. Your private model must be checked on Webby because its assets are not available to CI.

@@ -27,7 +27,7 @@ jobs:
           platforms: linux/amd64
       - name: Test against actual inherited app and dependencies
         run: |
-          docker run --rm --user root --entrypoint sh -v "$PWD/tests:/tests:ro" -v "$PWD/pytest.ini:/app/pytest.ini:ro" pocket-tts-dual:test -c 'python -m pip install pytest pytest-asyncio httpx && python -m pytest /tests -q'
+          docker run --rm --user root --entrypoint sh -v "$PWD/tests:/tests:ro" -v "$PWD/pytest.ini:/app/pytest.ini:ro" pocket-tts-dual:test -c 'python -m pip install pytest pytest-asyncio httpx && python -m pytest -c /app/pytest.ini /tests -q -p no:cacheprovider'
       - name: Smoke test real model and both protocols
         run: |
           docker run -d --name smoke -p 8000:8000 -p 10200:10200 -e HF_HUB_OFFLINE=0 -e POCKET_TTS_MAX_TOKENS=50 pocket-tts-dual:test
