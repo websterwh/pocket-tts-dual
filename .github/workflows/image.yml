@@ -1,0 +1,68 @@
+name: Test, build and publish
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build candidate (amd64 base)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: pocket-tts-dual:test
+          platforms: linux/amd64
+      - name: Test against actual inherited app and dependencies
+        run: |
+          docker run --rm --user root --entrypoint sh -v "$PWD/tests:/tests:ro" -v "$PWD/pytest.ini:/app/pytest.ini:ro" pocket-tts-dual:test -c 'python -m pip install pytest pytest-asyncio httpx && python -m pytest /tests -q'
+      - name: Smoke test real model and both protocols
+        run: |
+          docker run -d --name smoke -p 8000:8000 -p 10200:10200 -e HF_HUB_OFFLINE=0 -e POCKET_TTS_MAX_TOKENS=50 pocket-tts-dual:test
+          for attempt in $(seq 1 120); do
+            if curl -fsS http://localhost:8000/health; then break; fi
+            sleep 5
+          done
+          curl -fsS http://localhost:8000/health
+          docker exec -i smoke python < tests/smoke.py
+      - name: Container logs
+        if: always()
+        run: docker logs smoke || true
+      - name: Stop smoke container
+        if: always()
+        run: docker stop --time 120 smoke || true
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/websterwh/pocket-tts-dual
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,format=long
+            type=semver,pattern={{version}}
+      - name: Publish tested candidate
+        if: github.event_name != 'pull_request'
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            docker tag pocket-tts-dual:test "$tag"
+            docker push "$tag"
+          done <<< "$TAGS"

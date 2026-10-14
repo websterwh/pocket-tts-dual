@@ -1,0 +1,26 @@
+services:
+  pocket-tts:
+    image: ghcr.io/websterwh/pocket-tts-dual:latest
+    container_name: pocket-tts
+    restart: unless-stopped
+    stop_grace_period: 5m
+    ports:
+      - "8000:8000"
+      - "10200:10200"
+    volumes:
+      - /mnt/cache/appdata/pocket-tts:/models
+    environment:
+      POCKET_TTS_CONFIG: /models/config.yaml
+      POCKET_TTS_CHECKPOINT: "${POCKET_TTS_CHECKPOINT:-}"
+      POCKET_TTS_LANGUAGE: ""
+      POCKET_TTS_DEVICE: cpu
+      POCKET_TTS_VOICE: /models/voice_reference.wav
+      POCKET_TTS_TEMPERATURE: "0.2"
+      POCKET_TTS_MAX_TOKENS: "150"
+      POCKET_TTS_NUM_THREADS: "8"
+      POCKET_TTS_MAX_CONCURRENCY: "1"
+      POCKET_TTS_ALLOW_ARBITRARY_VOICE: "true"
+      HF_HUB_OFFLINE: "0"
+      HF_HOME: /models/hf-cache
+      WYOMING_VOICE: /models/voice_reference.wav
+      WYOMING_LANGUAGE: en
