@@ -9,7 +9,15 @@ An extension of `epidoux/pocket-tts:0.1.1`, with `pocket-tts==3.3.0` and `wyomin
 
 ## Publication status
 
-Source prepared and five local tests passed against application files extracted from the base image. Publication and real-model image validation must be confirmed by a successful GitHub Actions run before treating the following image as available. No custom checkpoint is included in the repository or image.
+Published and verified on October 14, 2026. [Successful build and real-model validation](https://github.com/websterwh/pocket-tts-dual/actions/runs/38648735574) used source commit `3d497b495267bafc86cf7c80387fdfc4d0fc345d`. All five tests passed inside the actual image, and the default model generated audio over HTTP and Wyoming at 24 kHz. Anonymous GHCR manifest access was verified.
+
+Image: `ghcr.io/websterwh/pocket-tts-dual:latest`
+
+Digest: `sha256:d2cc420a5c41e65c861a2bf01fc9a563fa3365c84dec976db90ed88cd31c3154`
+
+Immutable commit tag: `sha-3d497b495267bafc86cf7c80387fdfc4d0fc345d`
+
+No custom checkpoint is included in the repository or image. Your private model still needs a synthesis check on Webby.
 
 ## Build and release
 
@@ -17,7 +25,7 @@ The `Test, build and publish` workflow builds for `linux/amd64` (the base image 
 
 Push to `main` publishes `latest` and `sha-<full-commit>`; a `v1.0.0` tag publishes `1.0.0` and a commit tag. PRs test without publishing. Workflow permissions include `packages: write`; no separate registry secret is needed. Configure repository Actions permissions to permit these actions and GHCR writes. In the package settings, set package visibility to **Public** for anonymous pulls (GitHub may initially create a private package).
 
-Once that run succeeds and visibility is public:
+The published image is anonymously accessible:
 
 ```sh
 docker pull ghcr.io/websterwh/pocket-tts-dual:latest
