@@ -26,10 +26,11 @@ class WyomingService:
         self.server = None
         self.stopping = False
         attribution = Attribution(name="Kyutai", url="https://github.com/kyutai-labs/pocket-tts")
-        common = dict(attribution=attribution, installed=True, description="Pocket TTS", version="3.3.0")
+        common = dict(attribution=attribution, installed=True, version="3.3.0")
         self.info = Info(tts=[TtsProgram(name="pocket-tts", voices=[
-            TtsVoice(name=name, languages=[language], **common) for name in aliases
-        ], **common)])
+            TtsVoice(name=name, description=("Default (configured voice)" if name == "default" else name),
+                     languages=[language], **common) for name in aliases
+        ], description="Pocket TTS", **common)])
 
     async def start(self, host, port):
         self.server = await asyncio.start_server(self._accept, host, port)

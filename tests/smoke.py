@@ -21,6 +21,9 @@ async def main():
         await async_write_event(Describe().event(),writer)
         info = Info.from_event(await async_read_event(reader))
         assert 'alba' in [v.name for v in info.tts[0].voices]
+        labels = [v.description or v.name for v in info.tts[0].voices]
+        assert len(labels) == len(set(labels)), labels
+        assert next(v.description for v in info.tts[0].voices if v.name == 'alba') == 'alba' 
         await async_write_event(Synthesize('Hello.').event(),writer)
         types, count = [], 0
         while True:

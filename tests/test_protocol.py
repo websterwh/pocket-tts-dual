@@ -35,6 +35,10 @@ async def test_discovery_audio_selection_errors_shutdown():
         await async_write_event(Describe().event(), writer)
         info = Info.from_event(await async_read_event(reader))
         assert [v.name for v in info.tts[0].voices] == ['default','alba']
+        # Home Assistant uses description when present, falling back to name.
+        labels = [v.description or v.name for v in info.tts[0].voices]
+        assert labels == ['Default (configured voice)', 'alba']
+        assert len(set(labels)) == len(labels)
         assert not info.tts[0].supports_synthesize_streaming
         for voice, expected in [(None,'/models/voice.wav'), (SynthesizeVoice(name='alba'),'alba')]:
             await async_write_event(Synthesize('hello', voice).event(), writer)
