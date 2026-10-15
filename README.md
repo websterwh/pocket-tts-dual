@@ -68,7 +68,11 @@ Set these variables in addition to the custom voice configuration:
 
 A full model `.safetensors` weights file is selected through the custom YAML. `POCKET_TTS_CHECKPOINT` is an optional training-checkpoint override (for example `/models/checkpoint.pt`), not a voice-state selector. Leave it empty when the YAML already selects the intended model weights.
 
-Pocket TTS may reject predefined voice names with a custom configuration or custom weights. When CONFIG or CHECKPOINT is set, automatic Wyoming catalog advertisement is disabled; `default` and explicit `WYOMING_VOICES` entries remain available. Use compatible reference audio or exported voice states for these entries. Explicitly configuring a built-in voice name does not bypass the model's compatibility checks.
+Pocket TTS may reject precomputed stock voice states with a custom configuration or custom weights. For custom models with voice-cloning support, this image resolves catalog names such as `alba`, `anna` and `george` to Pocket TTS's official reference recordings and creates conditioning states using the loaded model. This works for both HTTP catalog names and Wyoming selections. Long stock recordings are truncated to 30 seconds for conditioning. Recordings download on first use and are cached under the Hugging Face cache directory; offline operation requires the recordings to be cached first.
+
+Stock speaker references and custom aliases are advertised together. A model without voice-cloning support advertises only its configured default and explicit custom aliases in custom-model mode. Compatible exported voice states can still be supplied explicitly.
+
+The same fine-tuned model generates every voice. Selecting a stock speaker reference does not switch to the released stock model, and the fine-tuning may affect how those speakers sound. Exact stock-model output requires using the released model configuration, or running a separate stock-model container.
 
 To use the stock catalog, clear CONFIG and CHECKPOINT, select a supported LANGUAGE, and recreate the container. Switching full checkpoints requires a container restart with the new configuration; one container does not switch between full checkpoints per request.
 
@@ -121,6 +125,6 @@ docker run --rm --user root --entrypoint sh \
   pocket-tts-dual:test -c 'python -m pip install pytest pytest-asyncio httpx && python -m pytest -c /app/pytest.ini /tests -q -p no:cacheprovider'
 ```
 
-Tests cover discovery, distinct voice labels, custom model catalog filtering, aliases, PCM conversion, request validation, shutdown, HTTP authentication, single-engine loading, shared scheduling and cancellation. Unit tests stub inference; the workflow additionally exercises the real default model. Custom model assets can be validated separately in the target deployment.
+Tests cover discovery, distinct voice labels, stock reference routing, custom model catalog filtering, aliases, PCM conversion, request validation, shutdown, HTTP authentication, single-engine loading, shared scheduling and cancellation. Unit tests stub inference; the workflow additionally exercises the real default model. Custom model assets can be validated separately in the target deployment.
 
 References: [base image](https://hub.docker.com/r/epidoux/pocket-tts), [Pocket TTS](https://github.com/kyutai-labs/pocket-tts), [Wyoming](https://github.com/rhasspy/wyoming), [MOS](https://docs.mos-official.net/).
