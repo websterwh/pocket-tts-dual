@@ -66,7 +66,7 @@ Set these variables in addition to the custom voice configuration:
 -e POCKET_TTS_DEVICE=cpu
 ```
 
-Set `POCKET_TTS_CHECKPOINT=/models/checkpoint.safetensors` when an explicit checkpoint override is required. Otherwise the custom YAML determines the model weights.
+A full model `.safetensors` weights file is selected through the custom YAML. `POCKET_TTS_CHECKPOINT` is an optional training-checkpoint override (for example `/models/checkpoint.pt`), not a voice-state selector. Leave it empty when the YAML already selects the intended model weights.
 
 Pocket TTS may reject predefined voice names with a custom configuration or custom weights. When CONFIG or CHECKPOINT is set, automatic Wyoming catalog advertisement is disabled; `default` and explicit `WYOMING_VOICES` entries remain available. Use compatible reference audio or exported voice states for these entries. Explicitly configuring a built-in voice name does not bypass the model's compatibility checks.
 
