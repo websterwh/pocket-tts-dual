@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from app.main import app, settings
 from app.tts import TTSEngine, KNOWN_VOICES
 from dual.server import WyomingService
+from dual.voices import voice_aliases
 
 @asynccontextmanager
 async def lifespan(app):
@@ -28,12 +29,9 @@ async def lifespan(app):
         await asyncio.to_thread(engine.load)
         app.state.engine = engine
         voice = os.environ.get("WYOMING_VOICE") or settings.pocket_tts_voice
-        aliases = {name: name for name in sorted(KNOWN_VOICES)}
-        aliases["default"] = voice
-        # Optional JSON mapping exposes friendly names for reference WAVs/embeddings.
         import json
-        aliases.update(json.loads(os.environ.get("WYOMING_VOICES", "{}")))
-        aliases["default"] = voice
+        aliases = voice_aliases(settings, KNOWN_VOICES, voice,
+                               json.loads(os.environ.get("WYOMING_VOICES", "{}")))
         for target in aliases.values():
             engine.validate_voice(target)
         service = WyomingService(engine, aliases, settings.pocket_tts_max_input_chars,

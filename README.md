@@ -1,134 +1,118 @@
 # Pocket TTS: HTTP + Wyoming
 
-An extension of `epidoux/pocket-tts:0.1.1`, with `pocket-tts==3.3.0` and `wyoming==1.7.2`. One FastAPI process loads exactly one upstream `TTSEngine`; HTTP and Wyoming use that same engine, voice cache and inference queue.
+Docker image extending `epidoux/pocket-tts:0.1.1` with Pocket TTS **3.3.0** and Wyoming **1.7.2**. One FastAPI process loads one `TTSEngine`, shared by both interfaces.
 
-- HTTP: port **8000**, inherited `/v1/audio/speech` and `/health` routes, authentication, response formats and voice allowlist.
-- Wyoming: port **10200**, `describe` → `info` discovery and `synthesize` → `audio-start`, PCM `audio-chunk`, `audio-stop`.
-- Audio: native model sample rate, mono, signed 16-bit little-endian PCM. Audio generation completes before chunks are sent; incremental text synthesis is not advertised.
-- One worker and concurrency **1** are required. Do not override the entrypoint to start multiple workers. Disconnected HTTP clients cannot release the model queue early. Shutdown stops accepting Wyoming connections and drains inference before closing the executor.
+| Interface | Port | Features |
+|---|---|---|
+| HTTP | 8000 | `/v1/audio/speech`, `/health`, upstream voice selection and response formats |
+| Wyoming | 10200 | Service discovery, voice selection, mono 16-bit little-endian PCM at the model sample rate |
 
-## Publication status
-
-Published and verified on October 14, 2026. [Successful build and real-model validation](https://github.com/websterwh/pocket-tts-dual/actions/runs/38648735574) used source commit `3d497b495267bafc86cf7c80387fdfc4d0fc345d`. All five tests passed inside the actual image, and the default model generated audio over HTTP and Wyoming at 24 kHz. Anonymous GHCR manifest access was verified.
-
-Image: `ghcr.io/websterwh/pocket-tts-dual:latest`
-
-Digest: `sha256:d2cc420a5c41e65c861a2bf01fc9a563fa3365c84dec976db90ed88cd31c3154`
-
-Immutable commit tag: `sha-3d497b495267bafc86cf7c80387fdfc4d0fc345d`
-
-No custom checkpoint is included in the repository or image. Your private model still needs a synthesis check on Webby.
-
-## Build and release
-
-The `Test, build and publish` workflow builds for `linux/amd64` (the base image architecture), runs tests against the actual inherited application, starts the real default model, validates both protocols, and only then pushes that exact candidate to GHCR. A failed test prevents publication.
-
-Push to `main` publishes `latest` and `sha-<full-commit>`; a `v1.0.0` tag publishes `1.0.0` and a commit tag. PRs test without publishing. Workflow permissions include `packages: write`; no separate registry secret is needed. Configure repository Actions permissions to permit these actions and GHCR writes. In the package settings, set package visibility to **Public** for anonymous pulls (GitHub may initially create a private package).
-
-The published image is anonymously accessible:
+## Run
 
 ```sh
 docker pull ghcr.io/websterwh/pocket-tts-dual:latest
+
+docker run -d --name pocket-tts \
+  --restart unless-stopped --stop-timeout 300 \
+  -p 8000:8000/tcp -p 10200:10200/tcp \
+  -v /path/to/models:/models \
+  -e POCKET_TTS_LANGUAGE=english \
+  -e POCKET_TTS_VOICE=alba \
+  -e POCKET_TTS_MAX_CONCURRENCY=1 \
+  -e HF_HOME=/models/hf-cache \
+  -e HF_HUB_OFFLINE=0 \
+  ghcr.io/websterwh/pocket-tts-dual:latest
 ```
 
-For a reproducible deployment, replace `latest` in Compose with the successful build's `sha-...` tag or image digest. Check anonymous pull access from the deployment host. A private package instead requires `docker login ghcr.io` using a credential with package read permission.
-
-## Deploy on MOS / existing Webby host
-
-Use [compose.yaml](compose.yaml). It preserves `/mnt/cache/appdata/pocket-tts:/models` and your supplied environment. MOS supports Compose stacks; use its Compose editor with this YAML, or run the commands below on the server. Confirm the actual host path exists if migrating from another OS. The existing container and the new stack cannot both own ports 8000/10200 or the name `pocket-tts`.
-
-1. Save the current container settings and image name. Back up the model/configuration files before changing the deployment. Keep the old container for rollback.
-2. Stop and rename it; this releases its name and ports without deleting it:
-
-   ```sh
-   docker stop pocket-tts
-   docker rename pocket-tts pocket-tts-backup
-   ```
-
-3. In a directory containing the supplied `compose.yaml`, deploy:
-
-   ```sh
-   docker compose pull
-   docker compose up -d
-   docker compose logs -f pocket-tts
-   ```
-
-4. Check both protocols and try your own reference voice:
-
-   ```sh
-   curl --fail http://Webby:8000/health
-   curl --fail http://Webby:8000/v1/audio/speech \
-     -H 'Content-Type: application/json' \
-     -d '{"input":"Hello from Pocket TTS.","response_format":"wav"}' -o test.wav
-   docker exec -i pocket-tts python - <<'PY'
-   import asyncio
-   from wyoming.event import async_read_event, async_write_event
-   from wyoming.info import Describe
-   async def main():
-       reader, writer = await asyncio.open_connection('127.0.0.1', 10200)
-       await async_write_event(Describe().event(), writer)
-       print(await asyncio.wait_for(async_read_event(reader), 10))
-       writer.close()
-       await writer.wait_closed()
-   asyncio.run(main())
-   PY
-   ```
-
-In the MOS container editor the equivalent is image `ghcr.io/websterwh/pocket-tts-dual:latest`, bridge networking, TCP mappings `8000:8000` and `10200:10200`, the `/models` mapping above, and all environment entries in Compose. The image runs as UID/GID **1000:1000**; that identity needs read access to model/config/voice files and write access to `/models/hf-cache`. Allow several minutes for initial model loading/downloads. Health is available after lifespan startup completes.
-
-Rollback:
+Replace `/path/to/models` with a host directory. The image runs as UID/GID `1000:1000`; model and reference files must be readable and the cache directory writable by that identity.
 
 ```sh
-docker compose down
-docker rename pocket-tts-backup pocket-tts
-docker start pocket-tts
+curl --fail http://localhost:8000/health
+curl --fail http://localhost:8000/v1/audio/speech \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"Hello.","voice":"alba","response_format":"wav"}' \
+  -o speech.wav
 ```
 
-This does not remove `/models`. Do not use volume deletion options.
+HTTP retains the upstream `wav`, `pcm`, `mp3`, `opus`, `aac` and `flac` formats. Optional `POCKET_TTS_API_KEY` enables HTTP bearer authentication. Keep the unauthenticated Wyoming port on a trusted network.
 
 ## Home Assistant
 
-Add the **Wyoming Protocol** integration, entering the Webby server's LAN IP and port **10200**. Select Pocket TTS in your voice assistant's text-to-speech configuration. `describe` advertises `default` and the existing voice catalog. This image does not advertise mDNS/zeroconf, so add the host and port manually. Expose TCP 10200 between Home Assistant and Webby.
+Add **Wyoming Protocol** using the Docker host's LAN IP and port `10200`. Select Pocket TTS as the text-to-speech provider in the voice assistant configuration. Voice labels use each catalog name or configured alias; `Default (configured voice)` selects the configured default reference.
 
-`default` resolves to `WYOMING_VOICE` when set, otherwise `POCKET_TTS_VOICE`. For a friendly custom voice entry, add an environment value:
+After updating the image, recreate the container and reload the Wyoming integration to refresh voice information. A Home Assistant restart is normally unnecessary. This image supports Wyoming `describe`/`info` discovery and does not publish an mDNS service itself.
 
-```yaml
-WYOMING_VOICES: '{"my-reference":"/models/voice_reference.wav","my-embedding":"/models/voice.safetensors"}'
+## Multiple custom voices
+
+Mount reference clips and exported voice states under `/models`, then configure aliases:
+
+```sh
+-e POCKET_TTS_ALLOW_ARBITRARY_VOICE=true \
+-e POCKET_TTS_VOICE=/models/voices/narrator.wav \
+-e WYOMING_VOICES='{"Narrator":"/models/voices/narrator.wav","Reader":"/models/voices/reader.safetensors","Guide":"/models/voices/guide.wav"}'
 ```
 
-Select that alias in Home Assistant or send a Wyoming `voice.name`. The existing voice validation still applies. `POCKET_TTS_ALLOW_ARBITRARY_VOICE=true` is required for reference paths or HF URLs. Reference WAVs and compatible saved voice embeddings are passed unchanged to Pocket TTS's `get_state_for_audio_prompt`; compatibility depends on the loaded model. Catalog entries describe the inherited allowlist, not a guarantee every voice is cached or compatible with a custom checkpoint. `HF_HUB_OFFLINE=0` permits missing assets to download.
+Each alias appears separately in Home Assistant. Wyoming requests select it with `voice.name`. HTTP requests use the underlying path as `voice`; `WYOMING_VOICES` aliases apply to Wyoming only. Voice conditioning states are cached per reference in the shared engine.
 
-Wyoming has no bearer authentication or TLS here. Keep it on a trusted LAN. `POCKET_TTS_API_KEY` continues to protect HTTP only. Arbitrary voice access permits callers to supply paths/URLs, so restrict access to both ports when enabled.
+A voice-state `.safetensors` file is an exported conditioning state, **not a full model checkpoint**. States must be compatible with the loaded model. WAV references also require a model that supports audio conditioning. Selecting a different reference does not load another model.
 
-## Models and voices
+## Custom models
 
-All upstream model-loading and audio-generation settings are inherited:
+Set these variables in addition to the custom voice configuration:
 
-| Setting | Your Compose value / behavior |
+```sh
+-e POCKET_TTS_CONFIG=/models/config.yaml \
+-e POCKET_TTS_LANGUAGE= \
+-e POCKET_TTS_DEVICE=cpu
+```
+
+Set `POCKET_TTS_CHECKPOINT=/models/checkpoint.safetensors` when an explicit checkpoint override is required. Otherwise the custom YAML determines the model weights.
+
+Pocket TTS may reject predefined voice names with a custom configuration or custom weights. When CONFIG or CHECKPOINT is set, automatic Wyoming catalog advertisement is disabled; `default` and explicit `WYOMING_VOICES` entries remain available. Use compatible reference audio or exported voice states for these entries. Explicitly configuring a built-in voice name does not bypass the model's compatibility checks.
+
+To use the stock catalog, clear CONFIG and CHECKPOINT, select a supported LANGUAGE, and recreate the container. Switching full checkpoints requires a container restart with the new configuration; one container does not switch between full checkpoints per request.
+
+## Environment
+
+All upstream model-loading, audio-generation and HTTP variables remain supported.
+
+| Variable | Purpose |
 |---|---|
-| `POCKET_TTS_CONFIG` | `/models/config.yaml` |
-| `POCKET_TTS_CHECKPOINT` | Empty by default; set to an explicit checkpoint if the YAML does not already identify it |
-| `POCKET_TTS_LANGUAGE` | Empty; upstream passes `None` for your custom config |
-| `POCKET_TTS_DEVICE` | `cpu` |
-| `POCKET_TTS_VOICE` | `/models/voice_reference.wav` |
-| `POCKET_TTS_TEMPERATURE` | `0.2` |
-| `POCKET_TTS_MAX_TOKENS` | `150` |
-| `POCKET_TTS_NUM_THREADS` | `8` |
-| `POCKET_TTS_MAX_CONCURRENCY` | Must be `1` |
-| `POCKET_TTS_ALLOW_ARBITRARY_VOICE` | `true` |
-| `HF_HUB_OFFLINE` / `HF_HOME` | `0` / `/models/hf-cache` |
-| `WYOMING_VOICE` | `/models/voice_reference.wav` |
-| `WYOMING_LANGUAGE` | `en`, discovery metadata only; does not change the loaded model |
-| `WYOMING_HOST` / `WYOMING_PORT` | Defaults `0.0.0.0` / `10200` |
-| `WYOMING_VOICES` | Optional JSON alias-to-voice mapping |
+| `POCKET_TTS_LANGUAGE` | Stock model language; empty for custom configuration |
+| `POCKET_TTS_CONFIG` | Custom YAML path or URL |
+| `POCKET_TTS_CHECKPOINT` | Optional full model checkpoint override |
+| `POCKET_TTS_DEVICE` | `cpu` or supported CUDA device |
+| `POCKET_TTS_VOICE` | HTTP default voice; Wyoming fallback |
+| `POCKET_TTS_ALLOW_ARBITRARY_VOICE` | Enables reference paths and URLs for trusted callers |
+| `POCKET_TTS_TEMPERATURE` | Model sampling temperature |
+| `POCKET_TTS_MAX_TOKENS` | Generation text chunk limit passed to Pocket TTS |
+| `POCKET_TTS_NUM_THREADS` | CPU thread count |
+| `POCKET_TTS_MAX_CONCURRENCY` | Must be `1` for shared inference |
+| `POCKET_TTS_MAX_INPUT_CHARS` | Input limit shared by HTTP and Wyoming |
+| `HF_HOME` / `HF_HUB_OFFLINE` | Model cache directory / offline mode |
+| `WYOMING_VOICE` | Wyoming default; falls back to `POCKET_TTS_VOICE` |
+| `WYOMING_VOICES` | JSON mapping of display aliases to reference paths or voice IDs |
+| `WYOMING_LANGUAGE` | Discovery language metadata; defaults to `en` |
+| `WYOMING_HOST` / `WYOMING_PORT` | Bind address / port; defaults to `0.0.0.0:10200` |
 
-The upstream `POCKET_TTS_MAX_INPUT_CHARS` applies to both protocols. Unknown voices and inference errors return Wyoming `error` events; details go to container logs. Standard HTTP formats and validation remain upstream behavior.
+Use one Uvicorn worker. Both interfaces share the engine's inference queue. Shutdown drains inference before closing the executor. Wyoming audio is sent in chunks after generation completes; incremental text synthesis is not advertised.
 
-Choose compatible voices per HTTP request with `voice`, or per Wyoming request with `voice.name`. Change `POCKET_TTS_CONFIG`, `POCKET_TTS_CHECKPOINT`, language or sampling settings and recreate the container to switch models/settings. In Compose use `docker compose up -d --force-recreate`; a plain restart does not apply edited Compose environment. Changing voices does not load another model. The fine-tuned checkpoint remains private in your mounted storage.
+## MOS deployment
 
-For the original built-in English model, clear CONFIG and CHECKPOINT and set LANGUAGE to `english`, with VOICE/WYOMING_VOICE set to `alba`, then recreate. Other compatible model configurations work the same way.
+In the MOS container editor, select `ghcr.io/websterwh/pocket-tts-dual:latest`, publish TCP ports `8000` and `10200`, mount a model directory at `/models`, and enter the desired environment variables. Use a restart policy and a shutdown timeout long enough for pending inference.
 
-## Development and validation
+For Compose deployments, adapt [compose.yaml](compose.yaml), particularly the host volume path and model/voice settings. Apply updates with:
+
+```sh
+docker compose pull
+docker compose up -d
+```
+
+Changing environment values requires container recreation. A plain restart does not apply edited Compose configuration.
+
+## Build and test
+
+GitHub Actions builds `linux/amd64`, runs the tests inside the candidate image, and verifies real-model speech over HTTP and Wyoming before publishing that candidate to GHCR. Pushes to `main` publish `latest` and `sha-<full-commit>` tags; version tags publish semantic version tags. Pull requests validate without publishing.
 
 ```sh
 docker build -t pocket-tts-dual:test .
@@ -137,6 +121,6 @@ docker run --rm --user root --entrypoint sh \
   pocket-tts-dual:test -c 'python -m pip install pytest pytest-asyncio httpx && python -m pytest -c /app/pytest.ini /tests -q -p no:cacheprovider'
 ```
 
-Tests cover real TCP discovery/framing, PCM clipping/endianness, voice selection, invalid requests, draining shutdown, startup cleanup, HTTP bearer authentication, inherited HTTP WAV rendering, single-engine loading, and shared scheduling including cancellation. Model inference is stubbed in unit tests. The workflow separately runs `tests/smoke.py` against real default-model inference. Your private model must be checked on Webby because its assets are not available to CI.
+Tests cover discovery, distinct voice labels, custom model catalog filtering, aliases, PCM conversion, request validation, shutdown, HTTP authentication, single-engine loading, shared scheduling and cancellation. Unit tests stub inference; the workflow additionally exercises the real default model. Custom model assets can be validated separately in the target deployment.
 
-Upstream references: [base image](https://hub.docker.com/r/epidoux/pocket-tts), [Pocket TTS](https://github.com/kyutai-labs/pocket-tts), [Wyoming](https://github.com/rhasspy/wyoming), [MOS walkthrough](https://docs.mos-official.net/docs/Installation/First-Walkthrough/).
+References: [base image](https://hub.docker.com/r/epidoux/pocket-tts), [Pocket TTS](https://github.com/kyutai-labs/pocket-tts), [Wyoming](https://github.com/rhasspy/wyoming), [MOS](https://docs.mos-official.net/).
