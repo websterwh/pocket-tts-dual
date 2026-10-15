@@ -37,7 +37,8 @@ async def lifespan(app):
         for target in aliases.values():
             engine.validate_voice(target)
         service = WyomingService(engine, aliases, settings.pocket_tts_max_input_chars,
-                                 os.environ.get("WYOMING_LANGUAGE", "en"))
+                                 os.environ.get("WYOMING_LANGUAGE", "en"),
+                                 default_voice_name=os.environ.get("WYOMING_VOICE_NAME"))
         await service.start(os.environ.get("WYOMING_HOST", "0.0.0.0"),
                             int(os.environ.get("WYOMING_PORT", "10200")))
         app.state.wyoming = service

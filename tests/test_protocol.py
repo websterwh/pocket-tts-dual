@@ -76,3 +76,12 @@ def test_pcm_clipping_nonfinite_and_shapes():
     assert np.frombuffer(pcm16([float('nan'),float('inf'),float('-inf'),2,-2]),'<i2').tolist() == [0,32767,-32768,32767,-32768]
     assert len(pcm16(np.zeros((1,5)))) == 10
     with pytest.raises(ValueError): pcm16(np.zeros((2,5)))
+
+
+def test_custom_default_display_name_preserves_voice_id():
+    service = WyomingService(Engine(), {'default':'/models/narrator.wav', 'alba':'alba'},
+                             default_voice_name='Narrator')
+    restored = Info.from_event(service.info.event())
+    assert [(v.name, v.description) for v in restored.tts[0].voices] == [
+        ('default', 'Narrator'), ('alba', 'alba')]
+    assert service.aliases['default'] == '/models/narrator.wav'

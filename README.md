@@ -38,7 +38,7 @@ HTTP retains the upstream `wav`, `pcm`, `mp3`, `opus`, `aac` and `flac` formats.
 
 ## Home Assistant
 
-Add **Wyoming Protocol** using the Docker host's LAN IP and port `10200`. Select Pocket TTS as the text-to-speech provider in the voice assistant configuration. Voice labels use each catalog name or configured alias; `Default (configured voice)` selects the configured default reference.
+Add **Wyoming Protocol** using the Docker host's LAN IP and port `10200`. Select Pocket TTS as the text-to-speech provider in the voice assistant configuration. Voice labels use each catalog name or configured alias; `Default (configured voice)` selects the configured default reference. Set `WYOMING_VOICE_NAME=Narrator` to give this entry a custom display name without changing its `default` voice ID or existing assistant selections. Additional custom voices display the names supplied in `WYOMING_VOICES`.
 
 After updating the image, recreate the container and reload the Wyoming integration to refresh voice information. A Home Assistant restart is normally unnecessary. This image supports Wyoming `describe`/`info` discovery and does not publish an mDNS service itself.
 
@@ -95,6 +95,7 @@ All upstream model-loading, audio-generation and HTTP variables remain supported
 | `POCKET_TTS_MAX_INPUT_CHARS` | Input limit shared by HTTP and Wyoming |
 | `HF_HOME` / `HF_HUB_OFFLINE` | Model cache directory / offline mode |
 | `WYOMING_VOICE` | Wyoming default; falls back to `POCKET_TTS_VOICE` |
+| `WYOMING_VOICE_NAME` | Optional display name for the default voice |
 | `WYOMING_VOICES` | JSON mapping of display aliases to reference paths or voice IDs |
 | `WYOMING_LANGUAGE` | Discovery language metadata; defaults to `en` |
 | `WYOMING_HOST` / `WYOMING_PORT` | Bind address / port; defaults to `0.0.0.0:10200` |

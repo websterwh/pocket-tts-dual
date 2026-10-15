@@ -20,7 +20,7 @@ def pcm16(audio):
 
 
 class WyomingService:
-    def __init__(self, engine, aliases, max_chars=5000, language="en"):
+    def __init__(self, engine, aliases, max_chars=5000, language="en", default_voice_name=None):
         self.engine, self.aliases, self.max_chars = engine, aliases, max_chars
         self.clients = set()
         self.server = None
@@ -28,7 +28,7 @@ class WyomingService:
         attribution = Attribution(name="Kyutai", url="https://github.com/kyutai-labs/pocket-tts")
         common = dict(attribution=attribution, installed=True, version="3.3.0")
         self.info = Info(tts=[TtsProgram(name="pocket-tts", voices=[
-            TtsVoice(name=name, description=("Default (configured voice)" if name == "default" else name),
+            TtsVoice(name=name, description=((default_voice_name or "Default (configured voice)") if name == "default" else name),
                      languages=[language], **common) for name in aliases
         ], description="Pocket TTS", **common)])
 
