@@ -36,6 +36,19 @@ curl --fail http://localhost:8000/v1/audio/speech \
 
 HTTP retains the upstream `wav`, `pcm`, `mp3`, `opus`, `aac` and `flac` formats. Optional `POCKET_TTS_API_KEY` enables HTTP bearer authentication. Keep the unauthenticated Wyoming port on a trusted network.
 
+## CPU and CUDA in one image
+
+Use the same `latest` image for either device:
+
+- `POCKET_TTS_DEVICE=cpu`: use the bundled CPU runtime; no CUDA download.
+- `POCKET_TTS_DEVICE=cuda` or `cuda:0`: on first startup, install a pinned PyTorch 2.13.0 / CUDA 12.6 runtime from the official PyTorch index. This build supports the Quadro P2000's Pascal architecture. Attach the GPU through the container runtime as well.
+
+CUDA packages are cached at `/models/.pocket-tts-runtime`, so the existing `/models` bind mount preserves them across restarts and container replacements. Initial installation needs outbound internet access, several GB of disk space, and write permission on the cache directory. `HF_HUB_OFFLINE` controls model downloads independently; it does not disable runtime package installation. Later starts use the completed cache without downloading it again. Interrupted or failed installations are not treated as complete. Shared-cache installations use a file lock.
+
+`POCKET_TTS_RUNTIME_CACHE` can select a different persistent writable directory. Set `POCKET_TTS_AUTO_INSTALL_CUDA=false` to require a pre-populated cache and prevent package downloads. CUDA runtime installation and import failures stop startup with an error; the launcher does not silently switch a requested CUDA deployment to CPU. The health check allows up to 15 minutes for first-time startup downloads.
+
+Changing the device requires recreating the container. CPU dynamic quantization and CUDA are separate modes; leave `POCKET_TTS_QUANTIZE=false` for CUDA. Model weights, voice aliases, and sampling settings work the same way on both devices.
+
 ## Home Assistant
 
 Add **Wyoming Protocol** using the Docker host's LAN IP and port `10200`. Select Pocket TTS as the text-to-speech provider in the voice assistant configuration. Voice labels use each catalog name or configured alias; `Default (configured voice)` selects the configured default reference. Set `WYOMING_VOICE_NAME=Narrator` to give this entry a custom display name without changing its `default` voice ID or existing assistant selections. Additional custom voices display the names supplied in `WYOMING_VOICES`.
